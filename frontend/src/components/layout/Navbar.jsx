@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext.jsx";
+import { useAuth } from "../../hooks/useAuth.js";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -18,6 +18,11 @@ const Navbar = () => {
       <div className="flex gap-4 items-center">
         {user ? (
           <>
+            {user.role === "admin" && (
+              <Link to="/admin" className="text-gray-700 hover:text-indigo-600 font-medium">
+                Admin
+              </Link>
+            )}
             <span className="text-gray-600">Hi, {user.name}</span>
             <button
               onClick={handleLogout}
