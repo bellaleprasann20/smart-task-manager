@@ -1,30 +1,42 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import api from "../services/api.js";
-import TaskCard from "../components/tasks/TaskCard.jsx";
-import TaskForm from "../components/tasks/TaskForm.jsx";
+
+// Bringing in all your upgraded custom components!
+import Button from "../components/common/Button.jsx";
 import Modal from "../components/common/Modal.jsx";
-import Loader from "../components/common/Loader.jsx";
+import SearchBar from "../components/tasks/SearchBar.jsx"; 
+import TaskFilter from "../components/tasks/TaskFilter.jsx";
+import TaskList from "../components/tasks/TaskList.jsx";
+import TaskForm from "../components/tasks/TaskForm.jsx";
 
 const Dashboard = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  const fetchTasks = async () => {
-    setLoading(true);
+  // Added 'silent' parameter to prevent full-page loading spinners on background updates
+  const fetchTasks = async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError("");
+    
     try {
       let url = "/tasks";
       if (search) url = `/tasks/search?q=${encodeURIComponent(search)}`;
       else if (statusFilter) url = `/tasks/filter?status=${statusFilter}`;
+      
       const { data } = await api.get(url);
       setTasks(data);
     } catch (err) {
       console.error(err);
+      setError("Failed to load tasks. Please try refreshing.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -42,16 +54,27 @@ const Dashboard = () => {
       }
       setModalOpen(false);
       setEditingTask(null);
-      fetchTasks();
+      // Silently refresh so the UI doesn't flicker
+      fetchTasks(true);
     } catch (err) {
       console.error(err);
+      alert("Failed to save task. Please try again.");
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this task?")) return;
-    await api.delete(`/tasks/${id}`);
-    fetchTasks();
+    if (!window.confirm("Are you sure you want to delete this task?")) return;
+    
+    try {
+      // Optimistic update: remove instantly for snappy UX
+      setTasks(prev => prev.filter(t => t._id !== id));
+      await api.delete(`/tasks/${id}`);
+      fetchTasks(true);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete task.");
+      fetchTasks(true); // Restore the UI if delete failed
+    }
   };
 
   const stats = {
@@ -61,81 +84,84 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <button
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Workspace</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage your tasks and stay productive.</p>
+        </div>
+        <Button 
+          variant="primary"
           onClick={() => {
             setEditingTask(null);
             setModalOpen(true);
           }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+          className="w-full sm:w-auto"
         >
-          + New Task
-        </button>
+          {/* Plus icon inside the button */}
+          <svg className="w-5 h-5 mr-1.5 -ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          New Task
+        </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold">{stats.total}</p>
-          <p className="text-gray-500 text-sm">Total</p>
+      {/* Responsive Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col items-center transition-shadow hover:shadow-md">
+          <p className="text-3xl font-black text-indigo-600">{stats.total}</p>
+          <p className="text-gray-500 text-sm font-medium mt-1 uppercase tracking-wider">Total Tasks</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
-          <p className="text-gray-500 text-sm">Completed</p>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col items-center transition-shadow hover:shadow-md">
+          <p className="text-3xl font-black text-emerald-600">{stats.completed}</p>
+          <p className="text-gray-500 text-sm font-medium mt-1 uppercase tracking-wider">Completed</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <p className="text-2xl font-bold text-gray-600">{stats.pending}</p>
-          <p className="text-gray-500 text-sm">Pending</p>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col items-center transition-shadow hover:shadow-md">
+          <p className="text-3xl font-black text-gray-700">{stats.pending}</p>
+          <p className="text-gray-500 text-sm font-medium mt-1 uppercase tracking-wider">Pending</p>
         </div>
       </div>
 
-      <div className="flex gap-3 mb-6">
-        <input
-          placeholder="Search tasks..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="border rounded px-3 py-2 flex-1"
+      {/* Controls: Search and Filter using your custom components */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-8 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <SearchBar 
+          value={search} 
+          onChange={setSearch} 
+          placeholder="Search your tasks..."
         />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="border rounded px-3 py-2"
-        >
-          <option value="">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="in-progress">In Progress</option>
-          <option value="completed">Completed</option>
-        </select>
+        <TaskFilter 
+          value={statusFilter} 
+          onChange={setStatusFilter} 
+        />
       </div>
 
-      {loading ? (
-        <Loader />
-      ) : tasks.length === 0 ? (
-        <p className="text-gray-500 text-center py-10">No tasks found.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task._id}
-              task={task}
-              onEdit={(t) => {
-                setEditingTask(t);
-                setModalOpen(true);
-              }}
-              onDelete={handleDelete}
-            />
-          ))}
+      {error && (
+        <div className="mb-6 p-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+          {error}
         </div>
       )}
 
+      {/* Reusable Task List handles the loading and empty states automatically */}
+      <TaskList 
+        tasks={tasks} 
+        loading={loading} 
+        onEdit={(t) => {
+          setEditingTask(t);
+          setModalOpen(true);
+        }} 
+        onDelete={handleDelete} 
+      />
+
+      {/* Task Creation/Editing Modal */}
       <Modal
         isOpen={modalOpen}
         onClose={() => {
           setModalOpen(false);
           setEditingTask(null);
         }}
-        title={editingTask ? "Edit Task" : "New Task"}
+        title={editingTask ? "Edit Task" : "Create New Task"}
       >
         <TaskForm
           initialTask={editingTask}
@@ -146,6 +172,7 @@ const Dashboard = () => {
           }}
         />
       </Modal>
+
     </div>
   );
 };
